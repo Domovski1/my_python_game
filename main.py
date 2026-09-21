@@ -145,15 +145,31 @@ class Unit:
             current_bar_width = int(bar_width * (self.hp / self.max_hp))
             pygame.draw.rect(surface, (50, 200, 50), (bx, by, current_bar_width, bar_height))
 
+
 class Player:
     def __init__(self, name, color):
         self.name = name
         self.color = color
         self.stars = 5
         self.units = []
+        # Сетка тумана войны: 0 - скрыто, 1 - видно. Изначально всё скрыто (0)
+        self.fog = [[0 for _ in range(MAP_SIZE)] for _ in range(MAP_SIZE)]
 
     def collect_income(self):
         self.stars += 2
+
+    def update_fog(self):
+        """Открывает клетки вокруг юнитов игрока (радиус 1 клетка)"""
+        # Сначала делаем видимыми клетки, где стоят наши юниты и их соседей
+        for unit in self.units:
+            if unit.hp > 0:
+                for dr in [-1, 0, 1]:
+                    for dc in [-1, 0, 1]:
+                        r = unit.y + dr
+                        c = unit.x + dc
+                        if 0 <= r < MAP_SIZE and 0 <= c < MAP_SIZE:
+                            self.fog[r][c] = 1
+
 
 class TurnManager:
     def __init__(self, players):
@@ -169,6 +185,7 @@ class TurnManager:
         self.current_player.collect_income()
         for unit in self.current_player.units:
             unit.reset_turn()
+        self.current_player.update_fog() # <--- ДОБАВИТЬ ЭТУ СТРОКУ
 
 # Инициализация игроков и их юнитов на случайной суше
 player1 = Player("Игрок 1 (Синий)", (50, 150, 255))
@@ -211,6 +228,10 @@ def get_attackable_targets(unit):
             if distance == 1:
                 targets.append(u)
     return targets
+
+player1.update_fog()
+player2.update_fog()
+
 
 # Главный цикл
 running = True
@@ -269,6 +290,7 @@ while running:
                         attacker.has_attacked = True
                         attacker.movement_left = 0
                         selected_unit = None
+                        turn_manager.current_player.update_fog() # <--- ДОБАВИТЬ СЮДА, чтобы туман открывался на ходу
                         combat_log = log_msg
                         
                     elif selected_unit and (gx, gy) in get_valid_moves(selected_unit):
@@ -281,21 +303,28 @@ while running:
                     else:
                         selected_unit = None
 
-    # --- ОТРИСОВКА КАРТЫ ---
+    # --- ОТРИСОВКА КАРТЫ С ТУМАНОМ ---
     valid_moves = get_valid_moves(selected_unit) if selected_unit else []
     attack_targets = get_attackable_targets(selected_unit) if selected_unit else []
     attack_coords = [(t.x, t.y) for t in attack_targets]
+    
+    current_fog = turn_manager.current_player.fog
 
     for row_idx, row in enumerate(map_data):
         for col_idx, tile_type in enumerate(row):
             iso_x, iso_y = to_isometric(col_idx, row_idx)
             
-            if (col_idx, row_idx) in attack_coords:
-                color = (230, 80, 80)
-            elif (col_idx, row_idx) in valid_moves:
-                color = VALID_MOVE_COLOR
+            # Если клетка скрыта туманом войны для текущего игрока
+            if current_fog[row_idx][col_idx] == 0:
+                color = (20, 20, 25) # Почти черный цвет тумана
             else:
-                color = LAND_COLOR if tile_type == 1 else WATER_COLOR
+                # Если клетка видна, красим её как обычно
+                if (col_idx, row_idx) in attack_coords:
+                    color = (230, 80, 80)
+                elif (col_idx, row_idx) in valid_moves:
+                    color = VALID_MOVE_COLOR
+                else:
+                    color = LAND_COLOR if tile_type == 1 else WATER_COLOR
                 
             points = [
                 (iso_x, iso_y), 
@@ -304,12 +333,15 @@ while running:
                 (iso_x - TILE_WIDTH // 2, iso_y + TILE_HEIGHT // 2)
             ]
             pygame.draw.polygon(screen, color, points)
-            pygame.draw.polygon(screen, GRID_COLOR, points, 1)
+            # Рисуем сетку только для видимых клеток
+            if current_fog[row_idx][col_idx] == 1:
+                pygame.draw.polygon(screen, GRID_COLOR, points, 1)
 
-    # Отрисовка юнитов
+    # Отрисовка юнитов (рисуем только тех, кто стоит на видимых клетках)
     for unit in all_units:
-        if unit.hp > 0:
+        if unit.hp > 0 and current_fog[unit.y][unit.x] == 1:
             unit.draw(screen)
+
 
     # --- ИНТЕРФЕЙС (UI) ---
     pygame.draw.rect(screen, UI_BG, (0, 0, WIDTH, 50))
