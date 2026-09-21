@@ -1,10 +1,12 @@
 import pygame
 import sys
+import random
 
 # Настройки окна
 WIDTH, HEIGHT = 900, 650
 TILE_WIDTH = 64
 TILE_HEIGHT = 32
+MAP_SIZE = 12
 
 # Цвета
 BG_COLOR = (30, 30, 40)
@@ -23,15 +25,66 @@ clock = pygame.time.Clock()
 font = pygame.font.SysFont("Arial", 16)
 font_large = pygame.font.SysFont("Arial", 22, bold=True)
 
+
+def generate_map(size):
+    """Генерирует случайную карту: острова (1) посреди океана (0)"""
+    # Шаг 1: Заполняем сетку случайным шумом (45% суши, 55% воды)
+    grid = [[1 if random.random() < 0.45 else 0 for _ in range(size)] for _ in range(size)]
+    
+    # Шаг 2: Сглаживаем карту (Клеточный автомат), чтобы получились цельные острова
+    for _ in range(2): # 2 прохода сглаживания
+        new_grid = [[0] * size for _ in range(size)]  # <--- ИСПРАВЛЕНО ТУТ
+        for r in range(size):
+            for c in range(size):
+                # Считаем живых соседей вокруг клетки
+                neighbors = 0
+                for dr in [-1, 0, 1]:
+                    for dc in [-1, 0, 1]:
+                        if 0 <= r + dr < size and 0 <= c + dc < size:
+                            neighbors += grid[r + dr][c + dc]
+                
+                # Если рядом много суши — клетка становится сушей, иначе водой
+                if neighbors > 4:
+                    new_grid[r][c] = 1
+                else:
+                    new_grid[r][c] = 0
+        grid = new_grid
+        
+    # Гарантируем, что края карты будут водой (эффект океана вокруг острова)
+    for i in range(size):
+        grid[0][i] = grid[size-1][i] = grid[i][0] = grid[i][size-1] = 0
+        
+    return grid
+
+
+
+
+
 # Двумерный массив карты
-map_data = [
-    [0, 0, 1, 1, 1, 0, 0],
-    [0, 1, 1, 1, 1, 1, 0],
-    [1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1],
-    [0, 1, 1, 1, 1, 1, 0],
-    [0, 0, 1, 1, 1, 0, 0],
-]
+map_data = generate_map(MAP_SIZE)
+# map_data = [
+#     [0, 0, 1, 1, 1, 0, 0],
+#     [0, 1, 1, 1, 1, 1, 0],
+#     [1, 1, 1, 1, 1, 1, 1],
+#     [1, 1, 1, 1, 1, 1, 1],
+#     [0, 1, 1, 1, 1, 1, 0],
+#     [0, 0, 1, 1, 1, 0, 0],
+# ]
+
+
+# Автоматически находим безопасные места на суше для спавна юнитов
+land_tiles = [(c, r) for r in range(MAP_SIZE) for c in range(MAP_SIZE) if map_data[r][c] == 1]
+
+# Если суши сгенерировалось слишком мало, подстрахуемся
+if len(land_tiles) < 2:
+    map_data = [[1 for _ in range(MAP_SIZE)] for _ in range(MAP_SIZE)]
+    land_tiles = [(c, r) for r in range(MAP_SIZE) for c in range(MAP_SIZE)]
+
+p1_spawn = random.choice(land_tiles)
+p2_spawn = random.choice(land_tiles)
+while p1_spawn == p2_spawn: # Чтобы не спавнились в одной клетке
+    p2_spawn = random.choice(land_tiles)
+
 
 def to_isometric(grid_x, grid_y):
     """Преобразует координаты сетки в ЦЕЛЫЕ экранные координаты пикселей"""
@@ -117,18 +170,19 @@ class TurnManager:
         for unit in self.current_player.units:
             unit.reset_turn()
 
-# Инициализация игроков
+# Инициализация игроков и их юнитов на случайной суше
 player1 = Player("Игрок 1 (Синий)", (50, 150, 255))
 player2 = Player("Игрок 2 (Красный)", (255, 70, 70))
 
-p1_unit = Unit(2, 2, player1)
-p2_unit = Unit(3, 2, player2)
+p1_unit = Unit(p1_spawn[0], p1_spawn[1], player1)
+p2_unit = Unit(p2_spawn[0], p2_spawn[1], player2)
 
 player1.units.append(p1_unit)
 player2.units.append(p2_unit)
 
 all_units = [p1_unit, p2_unit]
 turn_manager = TurnManager([player1, player2])
+
 
 end_turn_btn = pygame.Rect(WIDTH - 180, HEIGHT - 70, 150, 45)
 selected_unit = None
