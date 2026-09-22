@@ -189,3 +189,24 @@ class TurnManager:
         self.current_player.collect_income()
         for unit in self.current_player.units: unit.reset_turn()
         self.current_player.update_fog()
+
+class DamageText:
+    def __init__(self, x, y, text, color=(255, 50, 50)):
+        self.x = float(x)
+        self.y = float(y)
+        self.text = str(text)
+        self.color = color
+        self.lifetime = 40  # Сколько кадров текст будет виден (около 0.6 сек при 60 FPS)
+        self.velocity_y = -1.5  # Скорость полета текста строго вверх
+
+    def update(self):
+        """Продвигает текст вверх и уменьшает его время жизни"""
+        self.y += self.velocity_y
+        self.lifetime -= 1
+
+    def draw(self, surface, font):
+        """Рисует текст. На поздних кадрах делает его более прозрачным (эффект затухания)"""
+        # Если в вашей версии pygame поддерживается прозрачность для шрифтов:
+        # Для простоты сделаем обычный рендеринг, текст просто исчезнет, когда lifetime кончится.
+        text_surf = font.render(self.text, True, self.color)
+        surface.blit(text_surf, (int(self.x) - text_surf.get_width() // 2, int(self.y)))
