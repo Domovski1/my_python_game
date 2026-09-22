@@ -6,34 +6,39 @@ def to_isometric(grid_x, grid_y):
     iso_y = (grid_x + grid_y) * (TILE_HEIGHT // 2) + (HEIGHT // 4)
     return int(iso_x), int(iso_y)
 
-# --- ДОБАВЛЯЕМ КЛАСС ГОРОДА ---
 class City:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.owner = None  # None означает, что город нейтральный (деревня)
-        self.income = 2    # Сколько звёзд приносит за ход
+        self.owner = None  
+        self.income = 2    
 
-    # --- ДОБАВЬТЕ ЭТОТ МЕТОД ВНУТРЬ КЛАССА CITY ---
     def is_clicked(self, mouse_grid_x, mouse_grid_y):
-        """Проверяет, совпадает ли клик по сетке с координатами города"""
         return self.x == mouse_grid_x and self.y == mouse_grid_y
 
     def draw(self, surface):
         iso_x, iso_y = to_isometric(self.x, self.y)
         center_x = iso_x
         center_y = iso_y + TILE_HEIGHT // 2
-        
-        # Цвет города зависит от владельца
-        color = self.owner.color if self.owner else (200, 200, 200) # Серый для нейтральных
-        
-        # Рисуем домик/квадрат в центре тайла
+        color = self.owner.color if self.owner else (200, 200, 200)
         pygame.draw.rect(surface, color, (center_x - 8, center_y - 12, 16, 16))
-        pygame.draw.polygon(surface, (50, 50, 50), [
-            (center_x - 10, center_y - 12),
-            (center_x, center_y - 20),
-            (center_x + 10, center_y - 12)
-        ]) # Крыша
+        pygame.draw.polygon(surface, (50, 50, 50), [(center_x - 10, center_y - 12), (center_x, center_y - 20), (center_x + 10, center_y - 12)])
+
+class Port:
+    def __init__(self, x, y, owner):
+        self.x = x
+        self.y = y
+        self.owner = owner
+
+    def draw(self, surface):
+        iso_x, iso_y = to_isometric(self.x, self.y)
+        center_x = iso_x
+        center_y = iso_y + TILE_HEIGHT // 2
+        # Деревянный пирс (коричневый прямоугольник)
+        pygame.draw.rect(surface, (139, 69, 19), (center_x - 12, center_y - 4, 24, 8))
+        # Маленький флажок цвета владельца
+        pygame.draw.rect(surface, self.owner.color, (center_x + 4, center_y - 12, 6, 5))
+        pygame.draw.line(surface, (200, 200, 200), (center_x + 4, center_y - 12), (center_x + 4, center_y - 2))
 
 class Unit:
     def __init__(self, x, y, owner):
@@ -48,6 +53,7 @@ class Unit:
         self.atk = 3
         self.def_power = 2
         self.has_attacked = False
+        self.is_ship = False # Новый статус: корабль ли мы?
 
     def reset_turn(self):
         self.movement_left = self.max_movement
@@ -55,15 +61,21 @@ class Unit:
 
     def take_damage(self, amount):
         self.hp -= amount
-        if self.hp < 0:
-            self.hp = 0
+        if self.hp < 0: self.hp = 0
 
     def draw(self, surface):
         iso_x, iso_y = to_isometric(self.x, self.y)
         center_x = iso_x
         center_y = iso_y + TILE_HEIGHT // 2
         
-        pygame.draw.circle(surface, self.owner.color, (center_x, center_y), 12)
+        if self.is_ship:
+            # Отрисовка корабля (треугольник в изометрии)
+            points = [(center_x, center_y - 12), (center_x - 10, center_y + 4), (center_x + 10, center_y + 4)]
+            pygame.draw.polygon(surface, self.owner.color, points)
+            pygame.draw.polygon(surface, (255, 255, 255), points, 1) # Белый парус
+        else:
+            # Обычный воин (круг)
+            pygame.draw.circle(surface, self.owner.color, (center_x, center_y), 12)
         
         if self.movement_left == 0 and self.has_attacked:
             pygame.draw.circle(surface, (100, 100, 100), (center_x, center_y), 4)
@@ -83,21 +95,20 @@ class Player:
         self.color = color
         self.stars = 5
         self.units = []
-        self.cities = [] # --- Храним города игрока ---
+        self.cities = [] 
+        self.ports = [] # Список портов игрока
         self.fog = [[0 for _ in range(MAP_SIZE)] for _ in range(MAP_SIZE)]
 
     def collect_income(self):
-        # Базовый доход 1 звезда + доход от всех захваченных городов
         self.stars += 1 + sum(city.income for city in self.cities)
 
     def update_fog(self):
-        # Открываем туман вокруг юнитов
         for unit in self.units:
-            if unit.hp > 0:
-                self.reveal_area(unit.x, unit.y, 1)
-        # --- Города тоже открывают туман вокруг себя (радиус 1 клетка) ---
+            if unit.hp > 0: self.reveal_area(unit.x, unit.y, 1)
         for city in self.cities:
             self.reveal_area(city.x, city.y, 1)
+        for port in self.ports:
+            self.reveal_area(port.x, port.y, 1)
 
     def reveal_area(self, cx, cy, radius):
         for dr in range(-radius, radius + 1):
@@ -113,12 +124,10 @@ class TurnManager:
         self.current_player_idx = 0
 
     @property
-    def current_player(self):
-        return self.players[self.current_player_idx]
+    def current_player(self): return self.players[self.current_player_idx]
 
     def next_turn(self):
         self.current_player_idx = (self.current_player_idx + 1) % len(self.players)
         self.current_player.collect_income()
-        for unit in self.current_player.units:
-            unit.reset_turn()
+        for unit in self.current_player.units: unit.reset_turn()
         self.current_player.update_fog()
