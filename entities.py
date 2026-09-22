@@ -53,7 +53,16 @@ class Unit:
         self.atk = 3
         self.def_power = 2
         self.has_attacked = False
-        self.is_ship = False # Новый статус: корабль ли мы?
+        self.is_ship = False 
+
+        # --- НАСТРОЙКИ ПЛАВНОГО ПЕРЕМЕЩЕНИЯ ---
+        # Получаем стартовую позицию в пикселях на экране
+        start_px, start_py = to_isometric(self.x, self.y)
+        self.screen_x = float(start_px)
+        self.screen_y = float(start_py)
+        
+        self.path = []         # Список клеток (grid_x, grid_y) для анимации хода
+        self.move_speed = 4.0  # Скорость движения в пикселях за кадр
 
     def reset_turn(self):
         self.movement_left = self.max_movement
@@ -63,18 +72,66 @@ class Unit:
         self.hp -= amount
         if self.hp < 0: self.hp = 0
 
+    def move_to(self, target_x, target_y):
+        """Строит пошаговый путь 'лесенкой' от текущей клетки до цели"""
+        self.path = []
+        current_x, current_y = self.x, self.y
+
+        # Шагаем по X
+        while current_x != target_x:
+            current_x += 1 if target_x > current_x else -1
+            self.path.append((current_x, current_y))
+            
+        # Шагаем по Y
+        while current_y != target_y:
+            current_y += 1 if target_y > current_y else -1
+            self.path.append((current_x, current_y))
+
+        # Конечные координаты логически меняются сразу, чтобы другие системы знали, где юнит
+        self.x = target_x
+        self.y = target_y
+
+    def update_animation(self):
+        """Двигает пиксельные координаты юнита к следующей клетке в его пути"""
+        if not self.path:
+            # Если пути нет, принудительно выравниваем по текущей логической клетке
+            target_px, target_py = to_isometric(self.x, self.y)
+            self.screen_x = target_px
+            self.screen_y = target_py
+            return
+
+        # Берем первую промежуточную клетку из маршрута
+        next_grid_x, next_grid_y = self.path[0]
+        target_px, target_py = to_isometric(next_grid_x, next_grid_y)
+
+        # Вычисляем вектор расстояния до нее в пикселях
+        dx = target_px - self.screen_x
+        dy = target_py - self.screen_y
+        distance = (dx**2 + dy**2) ** 0.5
+
+        if distance <= self.move_speed:
+            # Мы дошли до промежуточной клетки — удаляем ее из пути
+            self.screen_x = target_px
+            self.screen_y = target_py
+            self.path.pop(0)
+        else:
+            # Двигаемся в направлении промежуточной клетки
+            self.screen_x += (dx / distance) * self.move_speed
+            self.screen_y += (dy / distance) * self.move_speed
+
     def draw(self, surface):
-        iso_x, iso_y = to_isometric(self.x, self.y)
-        center_x = iso_x
-        center_y = iso_y + TILE_HEIGHT // 2
+        # Обновляем анимацию перед отрисовкой
+        self.update_animation()
+
+        # Рисуем юнита по его ТЕКУЩИМ ЭКРАННЫМ (float) координатам, а не по сетке
+        center_x = int(self.screen_x)
+        center_y = int(self.screen_y) + TILE_HEIGHT // 2
         
         if self.is_ship:
-            # Отрисовка корабля (треугольник в изометрии)
             points = [(center_x, center_y - 12), (center_x - 10, center_y + 4), (center_x + 10, center_y + 4)]
             pygame.draw.polygon(surface, self.owner.color, points)
-            pygame.draw.polygon(surface, (255, 255, 255), points, 1) # Белый парус
+            pygame.draw.polygon(surface, (255, 255, 255), points, 1) 
         else:
-            # Обычный воин (круг)
             pygame.draw.circle(surface, self.owner.color, (center_x, center_y), 12)
         
         if self.movement_left == 0 and self.has_attacked:
@@ -88,6 +145,7 @@ class Unit:
             pygame.draw.rect(surface, (200, 50, 50), (bx, by, bar_width, bar_height))
             current_bar_width = int(bar_width * (self.hp / self.max_hp))
             pygame.draw.rect(surface, (50, 200, 50), (bx, by, current_bar_width, bar_height))
+
 
 class Player:
     def __init__(self, name, color):

@@ -230,11 +230,13 @@ while running:
                     # ПЕРЕМЕЩЕНИЕ: Ход на пустую подсвеченную клетку
                     elif selected_unit and (gx, gy) in get_valid_moves(selected_unit):
                         move_cost = abs(selected_unit.x - gx) + abs(selected_unit.y - gy)
-                        selected_unit.x = gx
-                        selected_unit.y = gy
+                        
+                        # ВМЕСТО СТАРЫХ СТРОК ВЫЗЫВАЕМ НАШ КЛАССНЫЙ МАРШРУТ:
+                        selected_unit.move_to(gx, gy) 
+                        
                         selected_unit.movement_left -= move_cost
                         
-                        # Трансформация в корабль при заходе на клетку порта из тумана
+                        # Трансформация в корабль при заходе на клетку порта
                         is_at_port = any(p.x == gx and p.y == gy and p.owner == current_player for p in all_ports)
                         if is_at_port and not selected_unit.is_ship:
                             selected_unit.is_ship = True
