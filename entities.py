@@ -14,6 +14,11 @@ class City:
         self.owner = None  # None означает, что город нейтральный (деревня)
         self.income = 2    # Сколько звёзд приносит за ход
 
+    # --- ДОБАВЬТЕ ЭТОТ МЕТОД ВНУТРЬ КЛАССА CITY ---
+    def is_clicked(self, mouse_grid_x, mouse_grid_y):
+        """Проверяет, совпадает ли клик по сетке с координатами города"""
+        return self.x == mouse_grid_x and self.y == mouse_grid_y
+
     def draw(self, surface):
         iso_x, iso_y = to_isometric(self.x, self.y)
         center_x = iso_x

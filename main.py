@@ -132,7 +132,6 @@ while running:
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 if end_turn_btn.collidepoint(mouse_pos):
-                    # Перед передачей хода проверяем захват городов текущим игроком
                     check_city_capture(turn_manager.current_player)
                     turn_manager.next_turn()
                     selected_unit = None
@@ -141,15 +140,28 @@ while running:
                 gx, gy = from_isometric(mouse_pos[0], mouse_pos[1])
                 
                 if 0 <= gy < MAP_SIZE and 0 <= gx < MAP_SIZE:
+                    current_player = turn_manager.current_player
+                    
+                    # 1. Проверяем, кликнули ли по живому юниту
                     clicked_unit = None
                     for u in all_units:
                         if u.x == gx and u.y == gy and u.hp > 0:
                             clicked_unit = u
                     
-                    if clicked_unit and clicked_unit.owner == turn_manager.current_player:
+                    # 2. Проверяем, кликнули ли по городу текущего игрока
+                    clicked_my_city = None
+                    for city in all_cities:
+                        if city.is_clicked(gx, gy) and city.owner == current_player:
+                            clicked_my_city = city
+
+                    # --- ЛОГИКА ДЕЙСТВИЙ ---
+                    
+                    # Выбор своего юнита
+                    if clicked_unit and clicked_unit.owner == current_player:
                         selected_unit = clicked_unit
                         combat_log = f"Выбран юнит {clicked_unit.owner.name}."
                     
+                    # АТАКА врага выбранным юнитом
                     elif selected_unit and clicked_unit and clicked_unit in get_attackable_targets(selected_unit):
                         attacker = selected_unit
                         defender = clicked_unit
@@ -176,15 +188,35 @@ while running:
                         selected_unit = None
                         combat_log = log_msg
                         
+                    # ДВИЖЕНИЕ на пустую клетку
                     elif selected_unit and (gx, gy) in get_valid_moves(selected_unit):
                         move_cost = abs(selected_unit.x - gx) + abs(selected_unit.y - gy)
                         selected_unit.x = gx
                         selected_unit.y = gy
                         selected_unit.movement_left -= move_cost
-                        turn_manager.current_player.update_fog()
+                        current_player.update_fog()
                         selected_unit = None
+                        combat_log = "Юнит переместился."
+                        
+                    # НАЙМ ЮНИТА: если кликнули по своему городу, не выбрали юнита и клетка пуста
+                    elif clicked_my_city and not clicked_unit:
+                        UNIT_COST = 3
+                        if current_player.stars >= UNIT_COST:
+                            # Создаем нового юнита прямо в городе
+                            new_unit = Unit(clicked_my_city.x, clicked_my_city.y, current_player)
+                            current_player.units.append(new_unit)
+                            all_units.append(new_unit)
+                            
+                            # Списываем звёзды
+                            current_player.stars -= UNIT_COST
+                            current_player.update_fog()
+                            combat_log = f"Нанят новый юнит в городе за {UNIT_COST} ⭐️!"
+                        else:
+                            combat_log = f"Недостаточно звёзд для найма воина! Нужно {UNIT_COST} ⭐️."
+                            
                     else:
                         selected_unit = None
+
 
     # --- ОТРИСОВКА ---
     valid_moves = get_valid_moves(selected_unit) if selected_unit else []
