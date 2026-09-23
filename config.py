@@ -1,10 +1,10 @@
 import pygame
 
 # Настройки окна и сетки
-WIDTH, HEIGHT = 900, 650
+WIDTH, HEIGHT = 1200, 800
 TILE_WIDTH = 64
 TILE_HEIGHT = 32
-MAP_SIZE = 12
+MAP_SIZE = 16
 
 # Цвета
 BG_COLOR = (30, 30, 40)
